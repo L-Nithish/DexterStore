@@ -137,40 +137,30 @@ function normaliseProduct(p) {
    On any failure, falls back gracefully — UI stays visible.
 ───────────────────────────────────────────────────────────── */
 async function loadProductsFromBackend() {
-  try {
-    const res = await fetch(API_BASE, {
-      method:  'GET',
-      headers: { 'Accept': 'application/json' },
-      /* No credentials needed for a public product listing */
-    });
+    try {
+        const response = await fetch(API_BASE);
 
-    if (!res.ok) {
-      throw new Error('API responded with status ' + res.status);
-    }
+        if (!response.ok) {
+            throw new Error("Failed to fetch products");
+        }
 
-    const raw = await res.json();
+        const data = await response.json();
 
-    /* API might return an array directly, or wrap it: { data: [...] } */
-    const list = Array.isArray(raw) ? raw : (raw.data || raw.products || raw.content || []);
+PRODUCTS = data.map(normaliseProduct);
+}
+catch (error) {
+    console.error(error);
+}
 
-    if (!list.length) {
-      throw new Error('API returned an empty product list');
-    }
+const page = location.pathname.split('/').pop() || 'index.html';
 
-    PRODUCTS = list.map(normaliseProduct);
-    console.info('[DexterStore] Loaded ' + PRODUCTS.length + ' products from backend.');
+if (page === '' || page === 'index.html') {
+    renderHomeGrid();
+}
 
-  } catch (err) {
-    /* Log it but DON'T crash — use fallback silently */
-    console.warn('[DexterStore] Backend unavailable, using fallback data. Reason:', err.message);
-    PRODUCTS = FALLBACK_PRODUCTS.map(normaliseProduct);
-  }
-
-  /* Re-render whichever page is active — data is now ready */
-  const page = location.pathname.split('/').pop() || 'index.html';
-  if (page === '' || page === 'index.html') renderHomeGrid();
-  if (page === 'products.html')             initProductsPage();
-  /* cart.html doesn't need PRODUCTS — it reads from localStorage */
+if (page === 'products.html') {
+    initProductsPage();
+}
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -541,25 +531,26 @@ document.addEventListener('DOMContentLoaded', () => {
   initReveal();
   initSmoothScroll();
 
-  const page = location.pathname.split('/').pop() || 'index.html';
+  const page = location.pathname.split('/').pop();
 
-  if (page === 'cart.html') {
-    /* Cart only needs localStorage — no API call required */
+if (page === 'cart' || page === 'cart.html') {
     initCartPage();
-    return;
-  }
-
-  if (page === '' || page === 'index.html' || page === 'products.html') {
-    /*
-      Step 1: Render fallback data immediately so the page is never blank.
-      Step 2: Fire the API call; when it resolves, re-render with live data.
-    */
+}
+else if (
+    page === '' ||
+    page === 'index.html'
+) {
     PRODUCTS = FALLBACK_PRODUCTS.map(normaliseProduct);
-
-    if (page === '' || page === 'index.html') renderHomeGrid();
-    if (page === 'products.html')             initProductsPage();
-
-    /* Now fetch from backend — will silently re-render on success */
+    renderHomeGrid();
     loadProductsFromBackend();
-  }
+}
+else if (
+    page === 'products' ||
+    page === 'products.html'
+) {
+    PRODUCTS = FALLBACK_PRODUCTS.map(normaliseProduct);
+    initProductsPage();
+    loadProductsFromBackend();
+}
+
 });
