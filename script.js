@@ -1,7 +1,7 @@
 /*
   DexterStore — script.js
   Author: Dexter
-  Backend: Spring Boot REST API → http://localhost:8080/api/products
+  Backend: Spring Boot REST API → https://dexterstore-backend.onrender.com
   Frontend: Pure HTML/CSS/JS on Live Server (127.0.0.1:5500)
 */
 
@@ -11,7 +11,7 @@
    CONFIG
    Change API_BASE if your Spring Boot port ever changes.
 ───────────────────────────────────────────────────────────── */
-const API_BASE = 'http://localhost:8080/api/products';
+const API_BASE = 'https://dexterstore-backend.onrender.com/api/products';
 
 /* ─────────────────────────────────────────────────────────────
    PRODUCTS — starts empty, filled by loadProductsFromBackend()
