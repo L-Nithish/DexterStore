@@ -2,30 +2,14 @@
   DexterStore — script.js
   Author: Dexter
   Backend: Spring Boot REST API → https://dexterstore-backend.onrender.com
-  Frontend: Pure HTML/CSS/JS on Live Server (127.0.0.1:5500)
+  Frontend: Pure HTML/CSS/JS
 */
 
 'use strict';
 
-/* ─────────────────────────────────────────────────────────────
-   CONFIG
-   Change API_BASE if your Spring Boot port ever changes.
-───────────────────────────────────────────────────────────── */
 const API_BASE = 'https://dexterstore-backend.onrender.com/api/products';
-
-/* ─────────────────────────────────────────────────────────────
-   PRODUCTS — starts empty, filled by loadProductsFromBackend()
-   All render functions read from this array, so once it's
-   populated everything works exactly like the static version.
-───────────────────────────────────────────────────────────── */
 let PRODUCTS = [];
 
-/* ─────────────────────────────────────────────────────────────
-   FALLBACK DATA
-   Shown instantly while the API call is in-flight, and used
-   permanently if the backend is unreachable (CORS error, server
-   down, etc.) so the page is never blank.
-───────────────────────────────────────────────────────────── */
 const FALLBACK_PRODUCTS = [
   {
     id: 1, category: 'resume', categoryLabel: 'Resume Template',
@@ -101,24 +85,12 @@ const FALLBACK_PRODUCTS = [
   },
 ];
 
-/* ─────────────────────────────────────────────────────────────
-   normaliseProduct()
-   Spring Boot returns: { id, name, price, image }
-   Our UI expects:      { id, name/title, price, image/img, + extras }
-   This function bridges both shapes so buildCard() always works
-   whether data comes from the API or the fallback array.
-───────────────────────────────────────────────────────────── */
 function normaliseProduct(p) {
   return {
     id:            p.id,
-    /* name field — API sends "name", fallback uses "name" too */
     name:          p.name  || p.title || 'Untitled Product',
-    /* price — keep as number */
     price:         Number(p.price) || 0,
-    /* image — API sends "image", fallback uses "image" */
     image:         p.image || p.img || '',
-    /* optional enrichment fields — present in fallback, may be
-       absent from API; safe defaults keep the card rendering clean */
     oldPrice:      p.oldPrice      || null,
     rating:        p.rating        || 4.5,
     reviews:       p.reviews       || 0,
@@ -130,74 +102,46 @@ function normaliseProduct(p) {
   };
 }
 
-/* ─────────────────────────────────────────────────────────────
-   loadProductsFromBackend()
-   Fetches from Spring Boot. On success, populates PRODUCTS and
-   re-renders whichever grid is on the current page.
-   On any failure, falls back gracefully — UI stays visible.
-───────────────────────────────────────────────────────────── */
 async function loadProductsFromBackend() {
-    try {
-        const response = await fetch(API_BASE);
-
-        if (!response.ok) {
-            throw new Error("Failed to fetch products");
-        }
-
-        const data = await response.json();
-
-PRODUCTS = data.map(normaliseProduct);
-}
-catch (error) {
+  try {
+    const response = await fetch(API_BASE);
+    if (!response.ok) throw new Error('Failed to fetch products');
+    const data = await response.json();
+    PRODUCTS = data.map(normaliseProduct);
+  } catch (error) {
     console.error(error);
+  }
+
+  const page = location.pathname.split('/').pop() || 'index.html';
+  if (page === '' || page === 'index.html') renderHomeGrid();
+  if (page === 'products.html') initProductsPage();
 }
 
-const page = location.pathname.split('/').pop() || 'index.html';
-
-if (page === '' || page === 'index.html') {
-    renderHomeGrid();
-}
-
-if (page === 'products.html') {
-    initProductsPage();
-}
-}
-
-/* ─────────────────────────────────────────────────────────────
-   CART — backed by localStorage so it persists across pages
-───────────────────────────────────────────────────────────── */
 const Cart = {
   KEY: 'dexterstore_cart',
-
   get() {
     try { return JSON.parse(localStorage.getItem(this.KEY)) || []; }
     catch { return []; }
   },
-
   save(arr)  { localStorage.setItem(this.KEY, JSON.stringify(arr)); },
   count()    { return this.get().length; },
   subtotal() { return this.get().reduce((s, i) => s + i.price, 0); },
-
   add(p) {
     const arr = this.get();
     if (arr.find(i => i.id === p.id)) return false;
     arr.push({
       id:            p.id,
-      title:         p.name,       /* normalised field */
+      title:         p.name,
       price:         p.price,
-      img:           p.image,      /* normalised field */
+      img:           p.image,
       categoryLabel: p.categoryLabel,
     });
     this.save(arr);
     return true;
   },
-
   remove(id) { this.save(this.get().filter(i => i.id !== id)); },
 };
 
-/* ─────────────────────────────────────────────────────────────
-   TOAST
-───────────────────────────────────────────────────────────── */
 function showToast(msg, type) {
   const t = document.getElementById('toast');
   if (!t) return;
@@ -208,19 +152,11 @@ function showToast(msg, type) {
 }
 window.showToast = showToast;
 
-/* ─────────────────────────────────────────────────────────────
-   CART BADGE
-───────────────────────────────────────────────────────────── */
 function syncCartBadge() {
   const el = document.getElementById('cartCount');
   if (el) el.textContent = Cart.count();
 }
 
-/* ─────────────────────────────────────────────────────────────
-   buildCard(p)
-   Accepts a normalised product object and returns card HTML.
-   Uses p.name and p.image (normalised field names).
-───────────────────────────────────────────────────────────── */
 function buildCard(p) {
   const safeRating = Math.min(5, Math.max(0, Math.round(p.rating)));
   const stars      = '★'.repeat(safeRating) + '☆'.repeat(5 - safeRating);
@@ -230,18 +166,19 @@ function buildCard(p) {
   const oldPx = p.oldPrice
     ? `<span class="pc-price-old">$${p.oldPrice}</span>`
     : '';
-
-  /* Use p.image (normalised); fall back to a plain grey placeholder */
   const imgSrc = p.image || 'https://placehold.co/600x375?text=No+Image';
 
   return `
 <div class="product-card reveal" data-id="${p.id}">
   <div class="pc-thumb">
-    <img src="${imgSrc}" alt="${p.name}" loading="lazy"
-         onerror="this.src='https://placehold.co/600x375?text=No+Image'">
+    <a href="product.html?id=${p.id}">
+      <img src="${imgSrc}" alt="${p.name}" loading="lazy"
+           onerror="this.src='https://placehold.co/600x375?text=No+Image'">
+    </a>
     ${badge}
     <div class="pc-overlay">
-      <button class="btn btn-white-solid btn-sm"
+      <a href="product.html?id=${p.id}" class="btn btn-white btn-sm">View details</a>
+      <button class="btn btn-white btn-sm"
               onclick="addToCart(${p.id}, this)">Quick add</button>
     </div>
   </div>
@@ -252,7 +189,7 @@ function buildCard(p) {
         <span class="pc-stars">${stars}</span>&nbsp;${p.rating} (${p.reviews})
       </span>
     </div>
-    <h3 class="pc-title">${p.name}</h3>
+    <h3 class="pc-title"><a href="product.html?id=${p.id}">${p.name}</a></h3>
     <p class="pc-desc">${p.desc}</p>
     <div class="pc-footer">
       <div class="pc-price">
@@ -266,11 +203,6 @@ function buildCard(p) {
 </div>`;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   addToCart()
-   Looks up product by id in the live PRODUCTS array so cart
-   always gets the fresh backend data (including correct price).
-───────────────────────────────────────────────────────────── */
 window.addToCart = function(id, btn) {
   const p = PRODUCTS.find(x => x.id === id);
   if (!p) {
@@ -282,17 +214,12 @@ window.addToCart = function(id, btn) {
     syncCartBadge();
     btn.textContent  = 'Added ✓';
     btn.disabled     = true;
-    btn.style.cssText = 'background:#16A34A;border-color:#16A34A;opacity:1;';
+    btn.style.cssText = 'background:#10b981;border-color:#10b981;opacity:1;';
   } else {
     showToast('Already in your cart.', '');
   }
 };
 
-/* ─────────────────────────────────────────────────────────────
-   renderHomeGrid()
-   Renders first 6 products on index.html.
-   Called once by loadProductsFromBackend() after PRODUCTS is ready.
-───────────────────────────────────────────────────────────── */
 function renderHomeGrid() {
   const grid = document.getElementById('homeProductGrid');
   if (!grid) return;
@@ -300,10 +227,6 @@ function renderHomeGrid() {
   initReveal();
 }
 
-/* ─────────────────────────────────────────────────────────────
-   renderProductGrid()
-   Applies active filter + sort then re-renders the full grid.
-───────────────────────────────────────────────────────────── */
 let activeFilter = 'all';
 let activeSort   = 'popular';
 
@@ -328,17 +251,11 @@ function renderProductGrid() {
   initReveal();
 }
 
-/* ─────────────────────────────────────────────────────────────
-   initProductsPage()
-   Wires up filter tabs and sort select on products.html.
-   renderProductGrid() is called here after PRODUCTS is loaded.
-───────────────────────────────────────────────────────────── */
 function initProductsPage() {
   const tabsEl = document.getElementById('filterTabs');
   const sortEl = document.getElementById('sortSelect');
 
   if (tabsEl) {
-    /* Remove old listeners by cloning, then re-attach */
     const freshTabs = tabsEl.cloneNode(true);
     tabsEl.parentNode.replaceChild(freshTabs, tabsEl);
 
@@ -362,11 +279,6 @@ function initProductsPage() {
   renderProductGrid();
 }
 
-/* ─────────────────────────────────────────────────────────────
-   initCartPage()
-   Renders cart items from localStorage and wires up summary,
-   coupon logic, and checkout button.
-───────────────────────────────────────────────────────────── */
 const COUPONS = { DEXTER20: 0.20, LAUNCH10: 0.10, SAVE15: 0.15 };
 let discountRate = 0;
 
@@ -384,7 +296,7 @@ function renderCartItems() {
         <div class="cart-empty-icon">🛒</div>
         <div class="cart-empty-title">Nothing here yet</div>
         <div class="cart-empty-sub">Go pick something from the store.</div>
-        <a href="products.html" class="btn btn-primary">Browse products</a>
+        <a href="products.html" class="btn btn-primary" style="margin-top:16px;">Browse products</a>
       </div>`;
     updateSummary();
     return;
@@ -448,11 +360,11 @@ function initCartPage() {
       if (COUPONS[code]) {
         discountRate          = COUPONS[code];
         couponMsg.textContent = '✓ ' + (COUPONS[code] * 100) + '% discount applied!';
-        couponMsg.style.color = '#16A34A';
+        couponMsg.style.color = '#10b981';
         updateSummary();
       } else {
         couponMsg.textContent = 'Invalid code. Try DEXTER20, LAUNCH10 or SAVE15.';
-        couponMsg.style.color = '#DC2626';
+        couponMsg.style.color = '#ef4444';
       }
     }
     applyBtn.addEventListener('click', applyCoupon);
@@ -467,9 +379,6 @@ function initCartPage() {
   }
 }
 
-/* ─────────────────────────────────────────────────────────────
-   NAVBAR — scroll shadow + mobile hamburger
-───────────────────────────────────────────────────────────── */
 function initNavbar() {
   const nav    = document.getElementById('navbar');
   const toggle = document.getElementById('navToggle');
@@ -477,17 +386,17 @@ function initNavbar() {
 
   if (nav) {
     window.addEventListener('scroll', () => {
-      nav.classList.toggle('scrolled', window.scrollY > 18);
+      nav.classList.toggle('scrolled', window.scrollY > 20);
     }, { passive: true });
   }
   if (toggle && menu) {
-    toggle.addEventListener('click', () => menu.classList.toggle('open'));
+    toggle.addEventListener('click', () => {
+      menu.classList.toggle('open');
+      toggle.classList.toggle('active');
+    });
   }
 }
 
-/* ─────────────────────────────────────────────────────────────
-   SCROLL REVEAL
-───────────────────────────────────────────────────────────── */
 function initReveal() {
   const els = document.querySelectorAll('.reveal:not(.visible)');
   if (!window.IntersectionObserver) {
@@ -501,13 +410,10 @@ function initReveal() {
         io.unobserve(e.target);
       }
     });
-  }, { threshold: 0.07, rootMargin: '0px 0px -32px 0px' });
+  }, { threshold: 0.05, rootMargin: '0px 0px -20px 0px' });
   els.forEach(el => io.observe(el));
 }
 
-/* ─────────────────────────────────────────────────────────────
-   SMOOTH SCROLL
-───────────────────────────────────────────────────────────── */
 function initSmoothScroll() {
   document.querySelectorAll('a[href^="#"]').forEach(a => {
     a.addEventListener('click', e => {
@@ -517,40 +423,251 @@ function initSmoothScroll() {
   });
 }
 
-/* ─────────────────────────────────────────────────────────────
-   BOOT
-   Order matters:
-   1. UI chrome (navbar, badge, reveal, scroll) — instant, no data needed
-   2. Cart page — reads localStorage, no API needed
-   3. Product pages — show fallback immediately, then replace with
-      live API data when the fetch resolves
-───────────────────────────────────────────────────────────── */
+function initTheme() {
+  const saved = localStorage.getItem('dexterstore_theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const theme = saved || (prefersDark ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+
+  const toggle = document.getElementById('themeToggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('dexterstore_theme', next);
+    });
+  }
+}
+
+function initCountUp() {
+  const counters = document.querySelectorAll('[data-countup]');
+  if (!counters.length) return;
+
+  const observed = new Set();
+
+  function animateCounter(el) {
+    const target   = parseFloat(el.dataset.countup);
+    const decimals = parseInt(el.dataset.decimals || '0', 10);
+    const format   = el.dataset.format;
+    const duration = 1800;
+    const start    = performance.now();
+
+    function tick(now) {
+      const elapsed  = Math.min((now - start) / duration, 1);
+      const eased    = elapsed === 1 ? 1 : 1 - Math.pow(2, -10 * elapsed);
+      const current  = eased * target;
+
+      if (format === 'k') {
+        el.textContent = (current / 1000).toFixed(current >= target ? 0 : 1) + 'k';
+      } else {
+        el.textContent = current.toFixed(decimals);
+      }
+
+      if (elapsed < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting && !observed.has(e.target)) {
+        observed.add(e.target);
+        animateCounter(e.target);
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.2 });
+
+  counters.forEach(el => io.observe(el));
+}
+
+/* ── PREMIUM INTERACTIVE INERTIAL SMOOTH SCROLLER (Lenis Engine integration) ── */
+function initPremiumSmoothScroll() {
+  if (window.matchMedia('(pointer: coarse)').matches) return;
+
+  const script = document.createElement('script');
+  script.src = "https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/dist/lenis.min.js";
+  script.onload = () => {
+    if (!window.Lenis) return;
+    
+    const lenis = new Lenis({
+      duration: 1.1,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      direction: 'vertical',
+      gestureDirection: 'vertical',
+      smooth: true,
+      smoothTouch: false
+    });
+
+    function raf(time) {
+      lenis.raf(time);
+      requestAnimationFrame(raf);
+    }
+    requestAnimationFrame(raf);
+
+    window.addEventListener('resize', () => lenis.resize());
+  };
+  document.head.appendChild(script);
+}
+
+function initHeroParallax() {
+  const sculpture = document.querySelector('.hero-sculpture');
+  if (!sculpture) return;
+
+  const layers = sculpture.querySelectorAll('.sculpture-layer');
+
+  window.addEventListener('scroll', () => {
+    const scrollY = window.scrollY || window.pageYOffset;
+    
+    const rect = sculpture.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+
+    layers.forEach(layer => {
+      const speed = parseFloat(layer.dataset.speed);
+      const yOffset = scrollY * speed;
+      
+      if (layer.classList.contains('sculpture-layer--back')) {
+        layer.style.transform = `translate3d(0, ${yOffset}px, -150px) scale(1.15)`;
+      } else if (layer.classList.contains('sculpture-layer--mid')) {
+        layer.style.transform = `translate3d(0, ${yOffset}px, -50px)`;
+      } else {
+        layer.style.transform = `translate3d(0, ${yOffset}px, 50px)`;
+      }
+    });
+  });
+}
+
+function initBeamsCanvas() {
+  const canvas = document.getElementById('beamsCanvas');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const hero = canvas.closest('.hero');
+  if (!hero) return;
+
+  const colors = [
+    'rgba(99, 102, 241, 1)',   // Indigo primary
+    'rgba(168, 85, 247, 1)',   // Purple accent
+    'rgba(59, 130, 246, 1)'    // Blue ambient
+  ];
+
+  let beams = [];
+  const beamCount = 14;
+
+  function initBeams() {
+    beams = [];
+    const w = canvas.width || 1200;
+    const h = canvas.height || 800;
+    for (let i = 0; i < beamCount; i++) {
+      const width = Math.random() * 120 + 80;
+      const length = Math.random() * 800 + 800;
+      beams.push({
+        x: Math.random() * (w + 400) - 200,
+        y: Math.random() * (h + length) - length,
+        width: width,
+        length: length,
+        speed: Math.random() * 1.2 + 0.8, // Faster, more dynamic movement
+        opacity: Math.random() * 0.12 + 0.08,
+        pulseVal: Math.random() * 100,
+        pulseSpeed: Math.random() * 0.01 + 0.005,
+        color: colors[Math.floor(Math.random() * colors.length)]
+      });
+    }
+  }
+
+  function resizeCanvas() {
+    const oldWidth = canvas.width;
+    const oldHeight = canvas.height;
+
+    canvas.width = hero.clientWidth || window.innerWidth;
+    canvas.height = hero.clientHeight || 800;
+
+    if (beams.length === 0 || oldWidth === 0 || oldHeight === 0) {
+      initBeams();
+    } else {
+      // Scale beams to new canvas dimensions to prevent bunching
+      beams.forEach(beam => {
+        const pctX = (beam.x + 200) / (oldWidth + 400);
+        beam.x = pctX * (canvas.width + 400) - 200;
+
+        const pctY = (beam.y + beam.length) / (oldHeight + beam.length);
+        beam.y = pctY * (canvas.height + beam.length) - beam.length;
+      });
+    }
+  }
+
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Dynamically adjust blend mode based on current theme to maintain visibility
+    const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+    ctx.globalCompositeOperation = theme === 'dark' ? 'screen' : 'source-over';
+
+    beams.forEach(beam => {
+      // Move beams vertically
+      beam.y += beam.speed;
+      
+      // Recycle only when the ENTIRE beam has scrolled off-screen
+      if (beam.y > canvas.height + beam.length / 2 + 100) {
+        beam.y = -beam.length / 2 - 100;
+        beam.x = Math.random() * (canvas.width + 400) - 200;
+      }
+
+      beam.pulseVal += beam.pulseSpeed;
+      let currentOpacity = beam.opacity + 0.04 * Math.sin(beam.pulseVal);
+      if (theme !== 'dark') {
+        currentOpacity *= 0.6; // Soften visibility on light backgrounds
+      }
+
+      ctx.save();
+      ctx.translate(beam.x, beam.y);
+      ctx.rotate(-Math.PI / 6); // Rotate by 30 degrees for diagonal orientation
+
+      const grad = ctx.createLinearGradient(0, -beam.length / 2, 0, beam.length / 2);
+      const colorBase = beam.color.substring(0, beam.color.lastIndexOf(',') + 1);
+      
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(0.3, `${colorBase} ${currentOpacity})`);
+      grad.addColorStop(0.7, `${colorBase} ${currentOpacity})`);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+
+      ctx.fillStyle = grad;
+      ctx.fillRect(-beam.width / 2, -beam.length / 2, beam.width, beam.length);
+      ctx.restore();
+    });
+
+    requestAnimationFrame(animate);
+  }
+
+  requestAnimationFrame(animate);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   initNavbar();
   syncCartBadge();
   initReveal();
   initSmoothScroll();
+  initCountUp();
+  initPremiumSmoothScroll();
+  initHeroParallax();
+  initBeamsCanvas();
 
   const page = location.pathname.split('/').pop();
 
-if (page === 'cart' || page === 'cart.html') {
+  if (page === 'cart' || page === 'cart.html') {
     initCartPage();
-}
-else if (
-    page === '' ||
-    page === 'index.html'
-) {
+  } else if (page === '' || page === 'index.html') {
     PRODUCTS = FALLBACK_PRODUCTS.map(normaliseProduct);
     renderHomeGrid();
     loadProductsFromBackend();
-}
-else if (
-    page === 'products' ||
-    page === 'products.html'
-) {
+  } else if (page === 'products' || page === 'products.html') {
     PRODUCTS = FALLBACK_PRODUCTS.map(normaliseProduct);
     initProductsPage();
     loadProductsFromBackend();
-}
-
+  }
 });
